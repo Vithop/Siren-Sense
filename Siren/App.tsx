@@ -8,14 +8,17 @@ import { FileSystem } from 'expo';
 
 export default function App() {
   const recordingSettings = Audio.RECORDING_OPTIONS_PRESET_LOW_QUALITY;
-  let recording: Audio.Recording | null = null;
-  let sound: Audio.Sound | null = null;
+  // let recording: Audio.Recording | null = null;
+  // let sound: Audio.Sound | null = null;
 
   const [recordingPermission, askForPermission] = usePermissions(Permissions.AUDIO_RECORDING, { ask: true });
   
   useEffect(() => {
     askForPermission()
   });
+
+  const [recording, setRecording] = React.useState<Audio.Recording | undefined>(undefined);
+  const [sound, setAudio] = React.useState<Audio.Sound | undefined>(undefined);
 
   const [ state, setState ] = React.useState({ 
     isLoading: false,
@@ -26,31 +29,34 @@ export default function App() {
   });
 
   const [buttonText, setButtonText] = React.useState({
-    record: 'Record',
+    record: 'Start Recording',
     playPause: 'Play'
   })
 
-  function updateRecordingStatus(audioState: Audio.RecordingStatus){
-    if (audioState.canRecord) {
-      state.isRecording = audioState.isRecording;
-      setState(state);
-    } else if (audioState.isDoneRecording) {
-      state.isRecording = false;
-      setState(state);
-      if (!state.isLoading) {
-        stopRecordingAndEnablePlayback();
-      }
-    }
-  }
+  // function updateRecordingStatus(audioState: Audio.RecordingStatus){
+  //   if (audioState.canRecord) {
+  //     setState({...state, isRecording: audioState.isRecording});
+  //   } else if (audioState.isDoneRecording) {
+  //     setState({...state, isRecording: false});
+  //     if (!state.isLoading) {
+  //       stopRecordingAndEnablePlayback();
+  //     }
+  //   }
+  // }
 
   function updateSoundStatus(audioState: AVPlaybackStatus){
     if (audioState.isLoaded) {
-      setState({
-        ...state,
-        shouldPlay: audioState.shouldPlay, 
-        isPlaying: audioState.isPlaying, 
-        isPlaybackAllowed: true
-      });
+      if (audioState.isPlaying) {
+        console.log("is playing");
+        setButtonText({...buttonText, playPause: 'Pause'});
+      } else {
+        console.log("not   playing");
+        setButtonText({...buttonText, playPause: 'Play'});
+      }
+      if (audioState.didJustFinish) {
+        console.log("audio finished playing")
+        sound?.setPositionAsync(0);
+      }
     } else {
       setState({...state, isPlaybackAllowed: false});
       if (audioState.error) {
@@ -59,7 +65,7 @@ export default function App() {
     }
   }
 
-  async function stopAudioAndBeginRecording() {
+  async function beginRecording() {
     // if (!recordingPermission || recordingPermission.status !== 'granted') {
     //   askForPermission
     // }
@@ -70,48 +76,51 @@ export default function App() {
       ...state,
       isLoading:true
     });
-    if(sound !== null) {
+    if(sound !== undefined) {
       await sound.unloadAsync();
       sound.setOnPlaybackStatusUpdate(null);
-      sound = null;
+      setAudio(undefined);
     }
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: true,
-      interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
-      playThroughEarpieceAndroid: false,
-      staysActiveInBackground: true,
-    });
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
+        playThroughEarpieceAndroid: false,
+        staysActiveInBackground: true,
+      });
+  
+      // if (recording !== undefined) {
+      //   recording.setOnRecordingStatusUpdate(null);
+      //   setRecording(undefined);
+      // }
+      console.log('Starting recording..');
+      const recording = new Audio.Recording();
+      await recording.prepareToRecordAsync(Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
+      await recording.startAsync(); 
+      setRecording(recording);
+      console.log('Recording started');
+      setState({...state, isLoading: false});
 
-    if (recording !== null) {
-      recording.setOnRecordingStatusUpdate(null);
-      recording = null;
+    } catch (err) {
+      console.error('Failed to start recording', err);
+      // setState({...state, isRecording: false});
     }
-    console.log("creating new recording");
-    const new_recording = new Audio.Recording();
-    console.log(new_recording);
-    console.log("start recording", recordingSettings);
-    await new_recording.prepareToRecordAsync(Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
-    console.log("derp");
-    new_recording.setOnRecordingStatusUpdate(updateRecordingStatus);
-    console.log("burp");
-    recording = new_recording;
-    await recording.startAsync(); // Will call this._updateScreenForRecordingStatus to update the screen.
-    console.log("recording started");
-    state.isLoading = false;
-    setState(state);
+   
   }
 
-  async function stopRecordingAndEnablePlayback() {
-    console.log("recording done... set up playback");
+  async function stopRecording() {
+    console.log("recording status:",recording !== undefined, "attempting to stop recording");
+    // console.log(recording)
     setState({...state, isLoading: true});
-
+    
     if (!recording) {
       return;
     }
     try {
+      setRecording(undefined);
       await recording.stopAndUnloadAsync();
     } catch(error) {
       if (error.code === "E_AUDIO_NODATA") {
@@ -124,8 +133,8 @@ export default function App() {
       setState({...state, isLoading: false});
       return;
     }
-    const audioInfo = await FileSystem.getInfoAsync(recording.getURI || "");
-    console.log(`FILE INFO: ${JSON.stringify(audioInfo)}`);
+    // const audioInfo = await FileSystem.getInfoAsync(recording.getURI || "");
+    // console.log(`FILE INFO: ${JSON.stringify(audioInfo)}`);
 
     await Audio.setAudioModeAsync({
       allowsRecordingIOS: true,
@@ -137,38 +146,28 @@ export default function App() {
       staysActiveInBackground: true,
     });
     console.log("create new audio file");
-    const new_audio = await recording.createNewLoadedSoundAsync(
-    {
-      isLooping: true,
-    },
-    updateSoundStatus
-    );
-    sound = new_audio.sound;
+    const new_audio = await recording.createNewLoadedSoundAsync({}, updateSoundStatus);
+    setAudio(new_audio.sound);
     console.log("new audio ready");
     setState({...state, isLoading: false})
   }
 
   
 
-  function onRecord() {
-    if (state.isRecording) {
-      setButtonText({...buttonText, record: 'Record'});
-      stopRecordingAndEnablePlayback();
-    } else {
-      setButtonText({...buttonText, record: 'Recording Audio...'});
-      stopAudioAndBeginRecording();
-    }
-  }
 
   function onPlayPausedPressed(){
-    if (sound !== null){
+    if (sound !== undefined){
       if (state.isPlaying) {
+        console.log("pause audio");
         setButtonText({...buttonText, playPause: 'Pause'});
         sound.pauseAsync();
       } else {
+        console.log("play audio");
         setButtonText({...buttonText, playPause: 'Play'});
         sound.playAsync();
       }
+    } else {
+      console.log("sound is undefined");
     }
   }
 
@@ -180,8 +179,8 @@ export default function App() {
         This is an Audio siren app. Tap record to begin recording and play to play what was recorded.
       </Text>
       <View style={styles.buttonLayout}>
-        <TouchableOpacity style={styles.button} onPress={onRecord} activeOpacity = { .5 }>
-          <Text style={styles.buttonText}>{buttonText.record}</Text>
+        <TouchableOpacity style={styles.button} onPress={recording ? stopRecording : beginRecording} activeOpacity = { .5 }>
+          <Text style={styles.buttonText}>{recording ? 'Stop Recording' : 'Begin Recording'}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.button} onPress={onPlayPausedPressed} activeOpacity = { .5 }>
           <Text style={styles.buttonText}>{buttonText.playPause}</Text>
@@ -194,7 +193,7 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#aaa',
     alignItems: 'center',
     justifyContent: 'center',
     marginHorizontal: 16,
