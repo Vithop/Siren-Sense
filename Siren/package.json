@@ -8,6 +8,7 @@
     "eject": "expo eject"
   },
   "dependencies": {
+    "axios": "^0.21.1",
     "expo": "~40.0.0",
     "expo-av": "~8.7.0",
     "expo-file-system": "~9.3.0",

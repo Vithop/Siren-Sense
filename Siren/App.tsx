@@ -1,9 +1,9 @@
-import { StatusBar } from 'expo-status-bar';
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import React, { useEffect } from 'react';
 import { Button, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as Permissions from 'expo-permissions';
 import { usePermissions } from 'expo-permissions';
+import axios from 'axios';
 
 import { 
   RecordingOptions, 
@@ -14,7 +14,7 @@ import {
 
 export const RECORDING_OPTIONS_PRESET_HIGH_QUALITY: RecordingOptions = {
   android: {
-    extension: '.mp4',
+    extension: '.mp3',
     outputFormat: RECORDING_OPTION_ANDROID_OUTPUT_FORMAT_DEFAULT,
     audioEncoder: RECORDING_OPTION_ANDROID_AUDIO_ENCODER_DEFAULT,
     sampleRate: 96000,
@@ -39,19 +39,70 @@ export default function App() {
     askForPermission()
   });
 
+
   const [recording, setRecording] = React.useState<Audio.Recording | undefined>(undefined);
+  const [sendAudio, updateAudio] = React.useState<Audio.Recording | undefined>(undefined);
   const [sound, setAudio] = React.useState<Audio.Sound | undefined>(undefined);
   const [isPlaying, setIsPlaying] = React.useState(false);
 
-
+  const URL = "http://192.168.0.115:5000/predict_mp3";
+  const URL2 = "http://192.168.0.115:5000/hello";
+  const URL3 = "http://192.168.0.115:5000/predict_wav"
+  const FILE_PATH = "assets/7061-6-0-0.wav";
 
   async function updateSoundStatus(audioState: AVPlaybackStatus){
     if (audioState.isLoaded) {
       setIsPlaying(audioState.isPlaying);
-      console.log("is audio playing?: ", audioState.isPlaying);
+      // console.log("is audio playing?: ", audioState.isPlaying);
 
     } else if (audioState.error) {
         console.log(`FATAL PLAYER ERROR: ${audioState.error}`);
+    }
+  }
+
+  // function blobToURI(uri) {
+  //   var binVal;
+  //   var input = uri.split(',')[0].split(':')[1].split(';');
+
+  //   if (uri.split(,))
+  // }
+
+  async function classifyAudio() {
+    // fetch(URL2)
+    // .then(response => console.log(response.json()))
+    // .then(data => console.log(data));
+    if (sendAudio && sendAudio != null) {
+      const uri = sendAudio.getURI();
+      console.log("send audio: " + sendAudio);
+      console.log("audio uri: " + uri);
+      var audio = {
+        uri: uri,
+        name: 'audio.mp3',
+        type: 'audio/mp3',
+      };
+      var formData = new FormData();
+
+      // formData.append(
+      //   "sendAudio",
+      //   {...sendAudio,
+      //   uri: uri.replace("file://", ""),
+      //   name: 'sendAudio',
+      //   type: 'audio/mp4'
+      //   }
+      // );
+
+      formData.append("file", audio);
+
+      // formData.append(
+      //   "sendAudio",
+      //    'mathuran is great',
+      // );
+
+      axios.post(URL, formData, {headers: {'Content-Type': 'multipart/form-data'}})
+      .then(response => console.log("response: " + JSON.stringify(response)))
+      .then(data => console.log("data: " + data))
+      .catch(error => console.log(error));
+ 
     }
   }
 
@@ -96,6 +147,7 @@ export default function App() {
       return;
     }
     try {
+      updateAudio(recording);
       setRecording(undefined);
       await recording.stopAndUnloadAsync();
     } catch(error) {
@@ -154,6 +206,9 @@ export default function App() {
         </TouchableOpacity>
         <TouchableOpacity style={styles.button} onPress={onPlayPausedPressed} activeOpacity = { .5 }>
           <Text style={styles.buttonText}>{isPlaying ? 'Pause' : 'Play'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={classifyAudio} activeOpacity={0.5}>
+          <Text style={styles.buttonText}>Send Audio</Text>
         </TouchableOpacity>
       </View>
     </View>
