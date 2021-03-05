@@ -4,22 +4,22 @@ import { Button, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as Permissions from 'expo-permissions';
 import { usePermissions } from 'expo-permissions';
 import axios from 'axios';
-
+import * as FileSystem from 'expo-file-system';
 import { 
   RecordingOptions, 
+  RECORDING_OPTION_ANDROID_AUDIO_ENCODER_AAC, 
   RECORDING_OPTION_ANDROID_AUDIO_ENCODER_DEFAULT, 
   RECORDING_OPTION_ANDROID_OUTPUT_FORMAT_DEFAULT, 
+  RECORDING_OPTION_ANDROID_OUTPUT_FORMAT_MPEG_4, 
   RECORDING_OPTION_IOS_AUDIO_QUALITY_MAX 
 } from 'expo-av/build/Audio';
+import { FileSystemUploadType } from 'expo-file-system';
 
 export const RECORDING_OPTIONS_PRESET_HIGH_QUALITY: RecordingOptions = {
   android: {
-    extension: '.mp3',
-    outputFormat: RECORDING_OPTION_ANDROID_OUTPUT_FORMAT_DEFAULT,
-    audioEncoder: RECORDING_OPTION_ANDROID_AUDIO_ENCODER_DEFAULT,
-    sampleRate: 96000,
-    numberOfChannels: 1,
-    bitRate: 128000,
+    extension: '.mp4',
+    outputFormat: RECORDING_OPTION_ANDROID_OUTPUT_FORMAT_MPEG_4,
+    audioEncoder: RECORDING_OPTION_ANDROID_AUDIO_ENCODER_AAC,
   },
   ios: {
     extension: '.caf',
@@ -72,33 +72,51 @@ export default function App() {
     // .then(response => console.log(response.json()))
     // .then(data => console.log(data));
     if (sendAudio && sendAudio != null) {
-      const uri = sendAudio.getURI();
+      const uri = sendAudio.getURI() ?? '';
       console.log("send audio: " + sendAudio);
       console.log("audio uri: " + uri);
       var audio = {
         uri: uri,
-        name: 'audio.mp3',
-        type: 'audio/mp3',
+        name: 'audio.mp4',
+        type: 'audio/mp4',
       };
+      // Base64 encoding for reading & writing
+    // const options = { encoding: FileSystem.EncodingType.Base64 };
+    // Read the audio resource from it's local Uri
+    // const soundData = await FileSystem.readAsStringAsync(uri, options);
+    const dataURI = FileSystem.getContentUriAsync(uri);
+
       var formData = new FormData();
 
       // formData.append(
       //   "sendAudio",
       //   {...sendAudio,
-      //   uri: uri.replace("file://", ""),
+      //   uri: dataURI,
       //   name: 'sendAudio',
       //   type: 'audio/mp4'
       //   }
       // );
 
-      formData.append("file", audio);
+      // formData.append("file", soundData);
 
       // formData.append(
       //   "sendAudio",
       //    'mathuran is great',
       // );
 
-      axios.post(URL, formData, {headers: {'Content-Type': 'multipart/form-data'}})
+      // axios.post(URL, formData, {headers: {'Content-Type': 'multipart/form-data'}})
+      // .then(response => console.log("response: " + JSON.stringify(response)))
+      // .then(data => console.log("data: " + data))
+      // .catch(error => console.log(error));
+
+      FileSystem.uploadAsync(URL, uri,
+        {
+          headers: {'Content-Type': 'multipart/form-data'}, 
+          httpMethod: 'POST', 
+          uploadType: FileSystemUploadType.MULTIPART,
+          fieldName: 'file',
+          mimeType: 'audio/mp4'
+        })
       .then(response => console.log("response: " + JSON.stringify(response)))
       .then(data => console.log("data: " + data))
       .catch(error => console.log(error));
