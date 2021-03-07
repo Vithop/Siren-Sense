@@ -1,0 +1,8 @@
+When running this in WSL 2 please create a proxy to your port for windows to use and add inbound rules for the port you are using
+
+The following command will create the proxy to your WSL 2 instance. Make sure you get the NEWEST IP from your instance as it will randomly generate a new one on start up
+The last address in the command should be replaced with your WSL 2 ip address
+
+netsh interface portproxy add v4tov4 listenport=5000 listenaddress=0.0.0.0 connectport=5000 connectaddress=192.168.170.227
+
+use the following video for extra help https://www.youtube.com/watch?v=yCK3easuYm4&ab_channel=DavidBombal 

@@ -1,0 +1,12 @@
+name: tf
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - tensorflow
+  - flask
+  - librosa
+  - pandas
+  - uwsgi
+  - libiconv
+prefix: /home/vithuran/anaconda3/envs/tf
