@@ -41,7 +41,7 @@ Notifications.setNotificationHandler({
 });
 
 async function sendPushNotification(message: object) {
-	console.log(message);
+	// console.log(message);
 	await fetch('https://exp.host/--/api/v2/push/send', {
 		method: 'POST',
 		headers: {
@@ -110,13 +110,13 @@ export default function App() {
 		}
 	}
 
-	async function classifyAudio() {
-		if (recordingBuffer && recordingBuffer != null) {
-			const uri = recordingBuffer.getURI() ?? '';
-			console.log('send audio: ' + recordingBuffer);
-			console.log('audio uri: ' + uri);
+	async function classifyAudio(recording: Audio.Recording) {
+		if (recording && recording != null) {
+			const uri = recording.getURI() ?? '';
+			// console.log('send audio: ' + recording);
+			// console.log('audio uri: ' + uri);
 
-			const URL = `http://${serverIp}/predict_mp3`;
+			const URL = `http://${serverIp}/predict`;
 			const prediction = await FileSystem.uploadAsync(URL, uri, {
 				headers: { 'Content-Type': 'multipart/form-data' },
 				httpMethod: 'POST',
@@ -124,9 +124,11 @@ export default function App() {
 				fieldName: 'file',
 				mimeType: 'audio/mp4'
 			})
-      .then((response) => JSON.parse(response.body).predicted_class)
-      .catch((error) => console.log(error));
-      
+			.then((response) => JSON.parse(response.body).predicted_class)
+			.catch((error) => console.log(error));
+
+			console.log(`Prediction received: ${prediction}`);
+
 			await sendPushNotification({
 				to: expoPushToken,
 				sound: 'default',
@@ -199,6 +201,8 @@ export default function App() {
 		const new_audio = await recording.createNewLoadedSoundAsync({ isLooping: true }, updateSoundStatus);
 		setAudio(new_audio.sound);
 		console.log('new audio ready');
+
+		classifyAudio(recording);
 	}
 
 	function onPlayPausedPressed() {
@@ -226,7 +230,7 @@ export default function App() {
 				<TouchableOpacity style={styles.button} onPress={onPlayPausedPressed} activeOpacity={0.5}>
 					<Text style={styles.buttonText}>{isPlaying ? 'Pause' : 'Play'}</Text>
 				</TouchableOpacity>
-				<TouchableOpacity style={styles.button} onPress={classifyAudio} activeOpacity={0.5}>
+				<TouchableOpacity style={styles.button} onPress={()=>{classifyAudio(recordingBuffer)}} activeOpacity={0.5}>
 					<Text style={styles.buttonText}>Send Audio</Text>
 				</TouchableOpacity>
 				<TouchableOpacity

@@ -20,7 +20,7 @@ import requests
 
 #     print("Predicted class: {}".format(data["predicted_class"]))
 
-URL = "http://127.0.0.1:5000/predict_mp3"
+URL = "http://127.0.0.1:5000/predict"
 
 
 # audio file we'd like to send for predicting keyword
