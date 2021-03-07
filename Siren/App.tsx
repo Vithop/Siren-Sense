@@ -6,29 +6,30 @@ import { usePermissions } from 'expo-permissions';
 import * as FileSystem from 'expo-file-system';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
+import serverIp from './serverIp';
 
 import {
-  RecordingOptions,
-  RECORDING_OPTION_ANDROID_AUDIO_ENCODER_AAC,
-  RECORDING_OPTION_ANDROID_OUTPUT_FORMAT_MPEG_4,
-  RECORDING_OPTION_IOS_AUDIO_QUALITY_MAX,
-  RECORDING_OPTION_IOS_OUTPUT_FORMAT_MPEG4AAC
+	RecordingOptions,
+	RECORDING_OPTION_ANDROID_AUDIO_ENCODER_AAC,
+	RECORDING_OPTION_ANDROID_OUTPUT_FORMAT_MPEG_4,
+	RECORDING_OPTION_IOS_AUDIO_QUALITY_MAX,
+	RECORDING_OPTION_IOS_OUTPUT_FORMAT_MPEG4AAC
 } from 'expo-av/build/Audio';
 
 export const RECORDING_OPTIONS_PRESET_HIGH_QUALITY: RecordingOptions = {
-  android: {
-    extension: '.mp4',
-    outputFormat: RECORDING_OPTION_ANDROID_OUTPUT_FORMAT_MPEG_4,
-    audioEncoder: RECORDING_OPTION_ANDROID_AUDIO_ENCODER_AAC,
-  },
-  ios: {
-    extension: '.mp4',
-    outputFormat: RECORDING_OPTION_IOS_OUTPUT_FORMAT_MPEG4AAC,
-    audioQuality: RECORDING_OPTION_IOS_AUDIO_QUALITY_MAX,
-    sampleRate: 44100,
-    numberOfChannels: 1,
-    bitRate: 128000,
-  },
+	android: {
+		extension: '.mp4',
+		outputFormat: RECORDING_OPTION_ANDROID_OUTPUT_FORMAT_MPEG_4,
+		audioEncoder: RECORDING_OPTION_ANDROID_AUDIO_ENCODER_AAC
+	},
+	ios: {
+		extension: '.mp4',
+		outputFormat: RECORDING_OPTION_IOS_OUTPUT_FORMAT_MPEG4AAC,
+		audioQuality: RECORDING_OPTION_IOS_AUDIO_QUALITY_MAX,
+		sampleRate: 44100,
+		numberOfChannels: 1,
+		bitRate: 128000
+	}
 };
 
 Notifications.setNotificationHandler({
@@ -40,7 +41,7 @@ Notifications.setNotificationHandler({
 });
 
 async function sendPushNotification(message: object) {
-  console.log(message);
+	console.log(message);
 	await fetch('https://exp.host/--/api/v2/push/send', {
 		method: 'POST',
 		headers: {
@@ -86,143 +87,133 @@ async function registerForPushNotificationsAsync() {
 export default function App() {
 	// Notification
 	const [ expoPushToken, setExpoPushToken ] = useState('');
-  const [recordingPermission, askForPermission] = usePermissions(Permissions.AUDIO_RECORDING, { ask: true });
+	const [ recordingPermission, askForPermission ] = usePermissions(Permissions.AUDIO_RECORDING, { ask: true });
 
-  useEffect(() => {
-    askForPermission()
-  });
+	useEffect(() => {
+		askForPermission();
+	});
 	useEffect(() => {
 		registerForPushNotificationsAsync().then((token) => setExpoPushToken(token));
 	}, []);
 
-  const [recording, setRecording] = React.useState<Audio.Recording | undefined>(undefined);
-  const [recordingBuffer, bufferAudio] = React.useState<Audio.Recording | undefined>(undefined);
-  const [sound, setAudio] = React.useState<Audio.Sound | undefined>(undefined);
-  const [isPlaying, setIsPlaying] = React.useState(false);
-  const URL = "http://192.168.0.115:5000/predict_mp4";
+	const [ recording, setRecording ] = React.useState<Audio.Recording | undefined>(undefined);
+	const [ recordingBuffer, bufferAudio ] = React.useState<Audio.Recording | undefined>(undefined);
+	const [ sound, setAudio ] = React.useState<Audio.Sound | undefined>(undefined);
+	const [ isPlaying, setIsPlaying ] = React.useState(false);
 
-  async function updateSoundStatus(audioState: AVPlaybackStatus) {
-    if (audioState.isLoaded) {
-      setIsPlaying(audioState.isPlaying);
-      // console.log("is audio playing?: ", audioState.isPlaying);
-    } else if (audioState.error) {
-      console.log(`FATAL PLAYER ERROR: ${audioState.error}`);
-    }
-  }
+	async function updateSoundStatus(audioState: AVPlaybackStatus) {
+		if (audioState.isLoaded) {
+			setIsPlaying(audioState.isPlaying);
+			// console.log("is audio playing?: ", audioState.isPlaying);
+		} else if (audioState.error) {
+			console.log(`FATAL PLAYER ERROR: ${audioState.error}`);
+		}
+	}
 
-  async function classifyAudio() {
+	async function classifyAudio() {
+		if (recordingBuffer && recordingBuffer != null) {
+			const uri = recordingBuffer.getURI() ?? '';
+			console.log('send audio: ' + recordingBuffer);
+			console.log('audio uri: ' + uri);
 
-    if (recordingBuffer) {
-      const uri = recordingBuffer.getURI() ?? '';
-      console.log("send audio: " + recordingBuffer);
-      console.log("audio uri: " + uri);
+			const URL = `http://${serverIp}/predict_mp3`;
+			const prediction = await FileSystem.uploadAsync(URL, uri, {
+				headers: { 'Content-Type': 'multipart/form-data' },
+				httpMethod: 'POST',
+				uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+				fieldName: 'file',
+				mimeType: 'audio/mp4'
+			})
+      .then((response) => JSON.parse(response.body).predicted_class)
+      .catch((error) => console.log(error));
+      
+			await sendPushNotification({
+				to: expoPushToken,
+				sound: 'default',
+				title: prediction,
+				body: `Predicted class is "${prediction}"`,
+				autoDismiss: true
+			});
+		}
+	}
+	async function beginRecording() {
+		if (!recordingPermission || recordingPermission.status !== 'granted') {
+			askForPermission;
+		}
 
-      const response = await FileSystem.uploadAsync(URL, uri,
-        {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          httpMethod: 'POST',
-          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-          fieldName: 'file',
-          mimeType: 'audio/mp4'
-        })
-        .then(response => console.log("response: " + JSON.stringify(response)))
-        .then(data => data)
-        .catch(error => console.log(error));
+		if (sound !== undefined) {
+			await sound.unloadAsync();
+			sound.setOnPlaybackStatusUpdate(null);
+			setAudio(undefined);
+		}
+		try {
+			await Audio.setAudioModeAsync({
+				allowsRecordingIOS: true,
+				interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
+				playsInSilentModeIOS: true,
+				interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DUCK_OTHERS,
+				shouldDuckAndroid: true,
+				staysActiveInBackground: true
+			});
 
-        console.log("Data:");
-        console.log(response);
-        
-        // await sendPushNotification({
-        //   to: expoPushToken,
-        //   sound: 'default',
-        //   title: response.predicted_class,
-        //   body: 'Predicted class is ' + response.predicted_class,
-        //   autoDismiss: true
-        // });
-    }
-  }
+			console.log('Starting recording..');
+			const recording = new Audio.Recording();
+			await recording.prepareToRecordAsync(RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
+			await recording.startAsync();
+			setRecording(recording);
+			console.log('Recording started');
+		} catch (err) {
+			console.error('Failed to start recording', err);
+		}
+	}
 
-  async function beginRecording() {
-    if (!recordingPermission || recordingPermission.status !== 'granted') {
-      askForPermission
-    }
+	async function stopRecording() {
+		console.log('recording status:', recording !== undefined, 'attempting to stop recording');
+		// console.log(recording)
 
-    if (sound !== undefined) {
-      await sound.unloadAsync();
-      sound.setOnPlaybackStatusUpdate(null);
-      setAudio(undefined);
-    }
-    try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
-        playsInSilentModeIOS: true,
-        interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DUCK_OTHERS,
-        shouldDuckAndroid: true,
-        staysActiveInBackground: true,
-      });
+		if (!recording) {
+			return;
+		}
+		try {
+			bufferAudio(recording);
+			setRecording(undefined);
+			await recording.stopAndUnloadAsync();
+		} catch (error) {
+			if (error.code === 'E_AUDIO_NODATA') {
+				console.log(`no data recieved. Stop was called too fast. Error mssg (${error.message})`);
+			} else {
+				console.log('STOP ERROR: ', error.code, ' ', error.name, ' ', error.message);
+			}
+			return;
+		}
 
-      console.log('Starting recording..');
-      const recording = new Audio.Recording();
-      await recording.prepareToRecordAsync(RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
-      await recording.startAsync();
-      setRecording(recording);
-      console.log('Recording started');
+		await Audio.setAudioModeAsync({
+			allowsRecordingIOS: true,
+			interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
+			playsInSilentModeIOS: true,
+			interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
+			staysActiveInBackground: true
+		});
 
-    } catch (err) {
-      console.error('Failed to start recording', err);
-    }
+		console.log('create new audio object');
+		const new_audio = await recording.createNewLoadedSoundAsync({ isLooping: true }, updateSoundStatus);
+		setAudio(new_audio.sound);
+		console.log('new audio ready');
+	}
 
-  }
+	function onPlayPausedPressed() {
+		if (sound !== undefined) {
+			if (isPlaying) {
+				sound.pauseAsync();
+			} else {
+				sound.playAsync();
+			}
+		} else {
+			console.log('sound is undefined');
+		}
+	}
 
-  async function stopRecording() {
-    console.log("recording status:", recording !== undefined, "attempting to stop recording");
-    // console.log(recording)
-
-    if (!recording) {
-      return;
-    }
-    try {
-      bufferAudio(recording);
-      setRecording(undefined);
-      await recording.stopAndUnloadAsync();
-    } catch (error) {
-      if (error.code === "E_AUDIO_NODATA") {
-        console.log(`no data recieved. Stop was called too fast. Error mssg (${error.message})`);
-      } else {
-        console.log("STOP ERROR: ", error.code, " ", error.name, " ", error.message);
-      }
-      return;
-    }
-
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
-      playsInSilentModeIOS: true,
-      interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
-      staysActiveInBackground: true,
-    });
-
-    console.log("create new audio object");
-    const new_audio = await recording.createNewLoadedSoundAsync({ isLooping: true }, updateSoundStatus);
-    setAudio(new_audio.sound);
-    console.log("new audio ready");
-
-  }
-
-  function onPlayPausedPressed() {
-    if (sound !== undefined) {
-      if (isPlaying) {
-        sound.pauseAsync();
-      } else {
-        sound.playAsync();
-      }
-    } else {
-      console.log("sound is undefined");
-    }
-  }
-
-  return (
+	return (
 		<SafeAreaView style={styles.container}>
 			<View style={styles.buttonLayout}>
 				<TouchableOpacity
@@ -257,7 +248,7 @@ export default function App() {
 				<Text style={styles.title}>Your expo push token: {expoPushToken}</Text>
 			</View>
 		</SafeAreaView>
-  );
+	);
 }
 
 const styles = StyleSheet.create({
