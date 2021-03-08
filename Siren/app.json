@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Siren",
-    "slug": "Siren",
+    "name": "Siren Sense",
+    "slug": "siren-sense",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
