@@ -89,6 +89,7 @@ const MAX_AUDIO_LEN_MILLIS = 3000;
 var recording: Audio.Recording | undefined = undefined;
 var sound: Audio.Sound | undefined = undefined;
 var timer: NodeJS.Timeout | null = null;
+var recordCount: number = 0;
 
 export default function App() {
 	// Notification
@@ -156,6 +157,8 @@ export default function App() {
 
 	async function beginRecording() {
 		setIsRecording(true);
+		recordCount++;
+
 		if (!recordingPermission || recordingPermission.status !== 'granted') {
 			askForPermission;
 		}
@@ -229,16 +232,21 @@ export default function App() {
 
 		await classifyAudio(recording);
 		recording = undefined;
+		recordCount--;
 	}
 
 	async function recordForDuration() {
 		// setRecordOnLoop(true);
 
-		console.log("Begin recording Loop")
-		await beginRecording();
-		await new Promise(resolve => setTimeout(resolve, MAX_AUDIO_LEN_MILLIS));
-		await stopRecording();
-		console.log("finished a 3sec recording")
+		if (recordCount == 0) {
+			console.log("Begin recording Loop")
+			await beginRecording();
+			await new Promise(resolve => setTimeout(resolve, MAX_AUDIO_LEN_MILLIS));
+			await stopRecording();
+			console.log("finished a 3sec recording")
+		} else if (recordOnLoop) {
+			recordForDuration();
+		}
 		// if (!recordOnLoop) {
 		// 	recordForDuration();
 		// } else {
