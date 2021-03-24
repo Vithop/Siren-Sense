@@ -6,10 +6,11 @@ import { usePermissions } from 'expo-permissions';
 import * as FileSystem from 'expo-file-system';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
-import serverIp from './serverIp';
+import serverIp from './serverIP';
 
 import {
 	RecordingOptions,
+	RecordingStatus,
 	RECORDING_OPTION_ANDROID_AUDIO_ENCODER_AAC,
 	RECORDING_OPTION_ANDROID_OUTPUT_FORMAT_MPEG_4,
 	RECORDING_OPTION_IOS_AUDIO_QUALITY_MAX,
@@ -76,7 +77,7 @@ async function registerForPushNotificationsAsync() {
 		Notifications.setNotificationChannelAsync('default', {
 			name: 'default',
 			importance: Notifications.AndroidImportance.MAX,
-			vibrationPattern: [ 0, 250, 250, 250 ],
+			vibrationPattern: [0, 250, 250, 250],
 			lightColor: '#FF231F7C'
 		});
 	}
@@ -84,10 +85,15 @@ async function registerForPushNotificationsAsync() {
 	return token;
 }
 
+const MAX_AUDIO_LEN_MILLIS = 3000;
+var recording: Audio.Recording | undefined = undefined;
+var sound: Audio.Sound | undefined = undefined;
+var timer: NodeJS.Timeout | null = null;
+
 export default function App() {
 	// Notification
-	const [ expoPushToken, setExpoPushToken ] = useState('');
-	const [ recordingPermission, askForPermission ] = usePermissions(Permissions.AUDIO_RECORDING, { ask: true });
+	const [expoPushToken, setExpoPushToken] = useState('');
+	const [recordingPermission, askForPermission] = usePermissions(Permissions.AUDIO_RECORDING, { ask: true });
 
 	useEffect(() => {
 		askForPermission();
@@ -96,10 +102,18 @@ export default function App() {
 		registerForPushNotificationsAsync().then((token) => setExpoPushToken(token));
 	}, []);
 
-	const [ recording, setRecording ] = React.useState<Audio.Recording | undefined>(undefined);
-	const [ recordingBuffer, bufferAudio ] = React.useState<Audio.Recording | undefined>(undefined);
-	const [ sound, setAudio ] = React.useState<Audio.Sound | undefined>(undefined);
-	const [ isPlaying, setIsPlaying ] = React.useState(false);
+	const [isRecording, setIsRecording] = React.useState<Boolean>(false);
+	const [recordingBuffer, bufferAudio] = React.useState<Audio.Recording | undefined>(undefined);
+	// const [sound, setAudio] = React.useState<Audio.Sound | undefined>(undefined);
+	const [isPlaying, setIsPlaying] = React.useState(false);
+	const [predictedAudio, updatePredictedAudio] = React.useState('');
+	const [recordOnLoop, setRecordOnLoop] = React.useState<boolean>(false);
+
+	// useEffect(() => {
+	// 	if (recordOnLoop && recording === undefined) {
+	// 		recordForDuration();
+	// 	}
+	// });
 
 	async function updateSoundStatus(audioState: AVPlaybackStatus) {
 		if (audioState.isLoaded) {
@@ -111,12 +125,12 @@ export default function App() {
 	}
 
 	async function classifyAudio(recording: Audio.Recording) {
-		if (recording && recording != null) {
+		if (recording) {
 			const uri = recording.getURI() ?? '';
 			// console.log('send audio: ' + recording);
 			// console.log('audio uri: ' + uri);
 
-			const URL = `http://${serverIp}/predict`;
+			const URL = `http://${serverIp}/predict_mp4`;
 			const prediction = await FileSystem.uploadAsync(URL, uri, {
 				headers: { 'Content-Type': 'multipart/form-data' },
 				httpMethod: 'POST',
@@ -124,11 +138,11 @@ export default function App() {
 				fieldName: 'file',
 				mimeType: 'audio/mp4'
 			})
-			.then((response) => JSON.parse(response.body).predicted_class)
-			.catch((error) => console.log(error));
+				.then((response) => JSON.parse(response.body).predicted_class)
+				.catch((error) => console.log(error));
 
 			console.log(`Prediction received: ${prediction}`);
-
+			updatePredictedAudio(prediction);
 			await sendPushNotification({
 				to: expoPushToken,
 				sound: 'default',
@@ -136,9 +150,12 @@ export default function App() {
 				body: `Predicted class is "${prediction}"`,
 				autoDismiss: true
 			});
+			return prediction;
 		}
 	}
+
 	async function beginRecording() {
+		setIsRecording(true);
 		if (!recordingPermission || recordingPermission.status !== 'granted') {
 			askForPermission;
 		}
@@ -146,9 +163,10 @@ export default function App() {
 		if (sound !== undefined) {
 			await sound.unloadAsync();
 			sound.setOnPlaybackStatusUpdate(null);
-			setAudio(undefined);
+			sound = undefined;
 		}
 		try {
+			//look into calling setModeAsync outside in an init function
 			await Audio.setAudioModeAsync({
 				allowsRecordingIOS: true,
 				interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
@@ -159,27 +177,34 @@ export default function App() {
 			});
 
 			console.log('Starting recording..');
-			const recording = new Audio.Recording();
-			await recording.prepareToRecordAsync(RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
-			await recording.startAsync();
-			setRecording(recording);
+			// if (recording) {
+			// 	await recording.stopAndUnloadAsync();
+			// 	setRecording(undefined);
+			// }
+			const new_recording = new Audio.Recording();
+			await new_recording.prepareToRecordAsync(RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
+			await new_recording.startAsync();
+			recording = new_recording;
+
 			console.log('Recording started');
+			// console.log(recording);
 		} catch (err) {
 			console.error('Failed to start recording', err);
 		}
 	}
 
 	async function stopRecording() {
-		console.log('recording status:', recording !== undefined, 'attempting to stop recording');
+		setIsRecording(false);
+		console.log('recording status:', recording !== undefined);
 		// console.log(recording)
 
-		if (!recording) {
+		if (recording === undefined) {
 			return;
 		}
 		try {
 			bufferAudio(recording);
-			setRecording(undefined);
 			await recording.stopAndUnloadAsync();
+			// recording = undefined;
 		} catch (error) {
 			if (error.code === 'E_AUDIO_NODATA') {
 				console.log(`no data recieved. Stop was called too fast. Error mssg (${error.message})`);
@@ -198,11 +223,49 @@ export default function App() {
 		});
 
 		console.log('create new audio object');
-		const new_audio = await recording.createNewLoadedSoundAsync({ isLooping: true }, updateSoundStatus);
-		setAudio(new_audio.sound);
+		let { sound: newSound } = await recording.createNewLoadedSoundAsync({ isLooping: true }, updateSoundStatus);
+		sound = newSound;
 		console.log('new audio ready');
 
-		classifyAudio(recording);
+		await classifyAudio(recording);
+		recording = undefined;
+	}
+
+	async function recordForDuration() {
+		// setRecordOnLoop(true);
+
+		console.log("Begin recording Loop")
+		await beginRecording();
+		await new Promise(resolve => setTimeout(resolve, MAX_AUDIO_LEN_MILLIS));
+		await stopRecording();
+		console.log("finished a 3sec recording")
+		// if (!recordOnLoop) {
+		// 	recordForDuration();
+		// } else {
+		// 	return;
+		// }
+
+		// setRecordOnLoop(false);
+	}
+
+	async function toggleRecordOnLoop() {
+		setRecordOnLoop(!recordOnLoop);
+
+		if (!recordOnLoop && timer == null) {
+			// recordForDuration();
+			timer = setInterval(recordForDuration, 3500);
+		} else if (timer != null) {
+			clearInterval(timer);
+			timer = null;
+		}
+
+		// while (!recordOnLoop) {
+		// 	console.log("Begin recording Loop")
+		// 	await beginRecording();
+		// 	await new Promise(resolve => setTimeout(resolve, MAX_AUDIO_LEN_MILLIS));
+		// 	await stopRecording();
+		// 	console.log("finished a 3sec recording")
+		// }
 	}
 
 	function onPlayPausedPressed() {
@@ -222,15 +285,18 @@ export default function App() {
 			<View style={styles.buttonLayout}>
 				<TouchableOpacity
 					style={styles.button}
-					onPress={recording ? stopRecording : beginRecording}
+					onPress={() => { isRecording ? stopRecording() : beginRecording() }}
 					activeOpacity={0.5}
 				>
-					<Text style={styles.buttonText}>{recording ? 'Stop Recording' : 'Begin Recording'}</Text>
+					<Text style={styles.buttonText}>{isRecording ? 'Stop Recording' : 'Begin Recording'}</Text>
+				</TouchableOpacity>
+				<TouchableOpacity style={styles.button} onPress={() => { toggleRecordOnLoop() }} activeOpacity={0.5}>
+					<Text style={styles.buttonText}>{recordOnLoop ? "Stop Recording Loop" : "Start Recording Loop"}</Text>
 				</TouchableOpacity>
 				<TouchableOpacity style={styles.button} onPress={onPlayPausedPressed} activeOpacity={0.5}>
 					<Text style={styles.buttonText}>{isPlaying ? 'Pause' : 'Play'}</Text>
 				</TouchableOpacity>
-				<TouchableOpacity style={styles.button} onPress={()=>{classifyAudio(recordingBuffer)}} activeOpacity={0.5}>
+				<TouchableOpacity style={styles.button} onPress={() => { classifyAudio(recordingBuffer) }} activeOpacity={0.5}>
 					<Text style={styles.buttonText}>Send Audio</Text>
 				</TouchableOpacity>
 				<TouchableOpacity
@@ -250,6 +316,7 @@ export default function App() {
 					<Text style={styles.buttonText}>Test Notification</Text>
 				</TouchableOpacity>
 				<Text style={styles.title}>Your expo push token: {expoPushToken}</Text>
+				<Text style={styles.title}>We currently sense: {predictedAudio == undefined ? "undefined" : predictedAudio}</Text>
 			</View>
 		</SafeAreaView>
 	);
