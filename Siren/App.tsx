@@ -105,16 +105,10 @@ export default function App() {
 
 	const [isRecording, setIsRecording] = React.useState<Boolean>(false);
 	const [recordingBuffer, bufferAudio] = React.useState<Audio.Recording | undefined>(undefined);
-	// const [sound, setAudio] = React.useState<Audio.Sound | undefined>(undefined);
 	const [isPlaying, setIsPlaying] = React.useState(false);
 	const [predictedAudio, updatePredictedAudio] = React.useState('');
 	const [recordOnLoop, setRecordOnLoop] = React.useState<boolean>(false);
 
-	// useEffect(() => {
-	// 	if (recordOnLoop && recording === undefined) {
-	// 		recordForDuration();
-	// 	}
-	// });
 
 	async function updateSoundStatus(audioState: AVPlaybackStatus) {
 		if (audioState.isLoaded) {
@@ -180,17 +174,12 @@ export default function App() {
 			});
 
 			console.log('Starting recording..');
-			// if (recording) {
-			// 	await recording.stopAndUnloadAsync();
-			// 	setRecording(undefined);
-			// }
 			const new_recording = new Audio.Recording();
 			await new_recording.prepareToRecordAsync(RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
 			await new_recording.startAsync();
 			recording = new_recording;
 
 			console.log('Recording started');
-			// console.log(recording);
 		} catch (err) {
 			console.error('Failed to start recording', err);
 		}
@@ -199,7 +188,6 @@ export default function App() {
 	async function stopRecording() {
 		setIsRecording(false);
 		console.log('recording status:', recording !== undefined);
-		// console.log(recording)
 
 		if (recording === undefined) {
 			return;
@@ -207,7 +195,6 @@ export default function App() {
 		try {
 			bufferAudio(recording);
 			await recording.stopAndUnloadAsync();
-			// recording = undefined;
 		} catch (error) {
 			if (error.code === 'E_AUDIO_NODATA') {
 				console.log(`no data recieved. Stop was called too fast. Error mssg (${error.message})`);
@@ -236,8 +223,6 @@ export default function App() {
 	}
 
 	async function recordForDuration() {
-		// setRecordOnLoop(true);
-
 		if (recordCount == 0) {
 			console.log("Begin recording Loop")
 			await beginRecording();
@@ -247,33 +232,17 @@ export default function App() {
 		} else if (recordOnLoop) {
 			recordForDuration();
 		}
-		// if (!recordOnLoop) {
-		// 	recordForDuration();
-		// } else {
-		// 	return;
-		// }
-
-		// setRecordOnLoop(false);
 	}
 
 	async function toggleRecordOnLoop() {
 		setRecordOnLoop(!recordOnLoop);
 
 		if (!recordOnLoop && timer == null) {
-			// recordForDuration();
 			timer = setInterval(recordForDuration, 3500);
 		} else if (timer != null) {
 			clearInterval(timer);
 			timer = null;
 		}
-
-		// while (!recordOnLoop) {
-		// 	console.log("Begin recording Loop")
-		// 	await beginRecording();
-		// 	await new Promise(resolve => setTimeout(resolve, MAX_AUDIO_LEN_MILLIS));
-		// 	await stopRecording();
-		// 	console.log("finished a 3sec recording")
-		// }
 	}
 
 	function onPlayPausedPressed() {
