@@ -139,13 +139,15 @@ export default function App() {
 
 			console.log(`Prediction received: ${prediction}`);
 			updatePredictedAudio(prediction);
-			await sendPushNotification({
-				to: expoPushToken,
-				sound: 'default',
-				title: prediction,
-				body: `Predicted class is "${prediction}"`,
-				autoDismiss: true
-			});
+			if (prediction != "noise") {
+				await sendPushNotification({
+					to: expoPushToken,
+					sound: 'default',
+					title: prediction,
+					body: `Predicted class is "${prediction}"`,
+					autoDismiss: true
+				});
+			}
 			return prediction;
 		}
 	}
@@ -265,11 +267,10 @@ export default function App() {
 					<Feather name={recordOnLoop ? "mic-off" : "mic"}
 						onPress={() => { toggleRecordOnLoop() }}
 						size={150}
-						color="blue" />
+						color="#b3b3b3" />
 				</View>
-
-				<Text style={styles.title}>Your expo push token: {expoPushToken}</Text>
-				<Text style={styles.title}>We currently sense: {predictedAudio == undefined ? "undefined" : predictedAudio}</Text>
+				<Text style={styles.title}>Currently Sensing:</Text>
+				<Text style={styles.title}>{predictedAudio == '' ? "nothing" : predictedAudio}</Text>
 			</View>
 		</SafeAreaView>
 	);
@@ -284,10 +285,17 @@ const styles = StyleSheet.create({
 		paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0
 	},
 	title: {
-		color: '#fff',
-		fontSize: 18,
+		color: '#b3b3b3',
+		fontSize: 26,
 		marginVertical: 15,
 		textAlign: 'center'
+	},
+	senseText: {
+		flexDirection: 'row',
+		alignItems: 'stretch',
+		textAlignVertical: 'top',
+		justifyContent: 'flex-start',
+		backgroundColor: 'white',
 	},
 	playPause: {
 		justifyContent: 'center',
