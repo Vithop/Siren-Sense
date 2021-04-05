@@ -7,6 +7,7 @@ import * as FileSystem from 'expo-file-system';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import serverIp from './serverIP';
+import { Feather } from '@expo/vector-icons';
 
 import {
 	RecordingOptions,
@@ -260,38 +261,13 @@ export default function App() {
 	return (
 		<SafeAreaView style={styles.container}>
 			<View style={styles.buttonLayout}>
-				<TouchableOpacity
-					style={styles.button}
-					onPress={() => { isRecording ? stopRecording() : beginRecording() }}
-					activeOpacity={0.5}
-				>
-					<Text style={styles.buttonText}>{isRecording ? 'Stop Recording' : 'Begin Recording'}</Text>
-				</TouchableOpacity>
-				<TouchableOpacity style={styles.button} onPress={() => { toggleRecordOnLoop() }} activeOpacity={0.5}>
-					<Text style={styles.buttonText}>{recordOnLoop ? "Stop Recording Loop" : "Start Recording Loop"}</Text>
-				</TouchableOpacity>
-				<TouchableOpacity style={styles.button} onPress={onPlayPausedPressed} activeOpacity={0.5}>
-					<Text style={styles.buttonText}>{isPlaying ? 'Pause' : 'Play'}</Text>
-				</TouchableOpacity>
-				<TouchableOpacity style={styles.button} onPress={() => { classifyAudio(recordingBuffer) }} activeOpacity={0.5}>
-					<Text style={styles.buttonText}>Send Audio</Text>
-				</TouchableOpacity>
-				<TouchableOpacity
-					style={styles.button}
-					onPress={async () => {
-						await sendPushNotification({
-							to: expoPushToken,
-							sound: 'default',
-							title: 'Original Title',
-							body: 'And here is the body!',
-							data: { someData: 'goes here' },
-							autoDismiss: true
-						});
-					}}
-					activeOpacity={0.5}
-				>
-					<Text style={styles.buttonText}>Test Notification</Text>
-				</TouchableOpacity>
+				<View style={styles.playPause}>
+					<Feather name={recordOnLoop ? "mic-off" : "mic"}
+						onPress={() => { toggleRecordOnLoop() }}
+						size={150}
+						color="blue" />
+				</View>
+
 				<Text style={styles.title}>Your expo push token: {expoPushToken}</Text>
 				<Text style={styles.title}>We currently sense: {predictedAudio == undefined ? "undefined" : predictedAudio}</Text>
 			</View>
@@ -312,6 +288,14 @@ const styles = StyleSheet.create({
 		fontSize: 18,
 		marginVertical: 15,
 		textAlign: 'center'
+	},
+	playPause: {
+		justifyContent: 'center',
+		alignItems: 'center',
+		flexDirection: 'row',
+		borderRadius: 5,
+		padding: 16,
+		marginTop: 10
 	},
 	button: {
 		backgroundColor: '#007AFF',
